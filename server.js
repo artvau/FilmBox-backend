@@ -7,6 +7,10 @@ const { pool, initDB } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Проверка DATABASE_URL при старте
+console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('DATABASE_URL host:', process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).host : 'N/A');
+
 // Middleware
 app.use(express.json());
 
