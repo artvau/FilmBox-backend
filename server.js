@@ -7,25 +7,9 @@ const { pool, initDB } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Проверка DATABASE_URL при старте
-console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('DATABASE_URL host:', process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL).host : 'N/A');
-
 // Middleware
 app.use(express.json());
-
-// CORS - разрешаем все источники для Railway
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Логирование всех запросов
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
-  next();
-});
+app.use(cors());
 
 // ==================== AUTH ROUTES ====================
 
@@ -69,8 +53,8 @@ app.post('/api/register', async (req, res) => {
 
     const user = result.rows[0];
     res.status(201).json({ 
-      success: true, 
-      user: { id: user.id, name: user.name, email: user.email } 
+      message: 'Регистрация успешна',
+      user: { id: user.id, name: user.name, email: user.email }
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -90,19 +74,19 @@ app.post('/api/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Неверные данные' });
+      return res.status(401).json({ error: 'Неверный email или пароль' });
     }
 
     const user = result.rows[0];
     const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
-      return res.status(401).json({ error: 'Неверные данные' });
+      return res.status(401).json({ error: 'Неверный email или пароль' });
     }
 
     res.json({ 
-      success: true, 
-      user: { id: user.id, name: user.name, email: user.email } 
+      message: 'Вход успешен',
+      user: { id: user.id, name: user.name, email: user.email }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -121,7 +105,7 @@ app.get('/api/orders/:userId', async (req, res) => {
       'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
     );
-    res.json({ orders: result.rows });
+    res.json(result.rows);
   } catch (err) {
     console.error('Get orders error:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -132,8 +116,8 @@ app.get('/api/orders/:userId', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const { userId, filmTitle, filmId, format, quantity, price, total } = req.body;
 
-  if (!userId || !filmTitle || !format || !quantity || !price || !total) {
-    return res.status(400).json({ error: 'Заполните все поля заказа' });
+  if (!userId || !filmTitle || !format || !price || !total) {
+    return res.status(400).json({ error: 'Недостаточно данных для заказа' });
   }
 
   try {
@@ -141,10 +125,9 @@ app.post('/api/orders', async (req, res) => {
       `INSERT INTO orders (user_id, film_title, film_id, format, quantity, price, total) 
        VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-      [userId, filmTitle, filmId, format, quantity, price, total]
+      [userId, filmTitle, filmId || null, format, quantity || 1, price, total]
     );
-
-    res.status(201).json({ success: true, order: result.rows[0] });
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Create order error:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -159,29 +142,11 @@ app.get('/api/health', (req, res) => {
 
 // ==================== START SERVER ====================
 
-// Сначала запускаем сервер, потом инициализируем базу
-const server = app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 FilmBox API running on port ${PORT}`);
-  
-  // Инициализируем базу данных после запуска сервера
-  try {
-    await initDB();
-  } catch (err) {
-    console.error('Database init failed, but server is running:', err.message);
-    // Не завершаем процесс - сервер продолжит работать
-    // Можно будет переподключиться позже
-  }
-});
+async function start() {
+  await initDB();
+  app.listen(PORT, () => {
+    console.log(`🚀 FilmBox API running on port ${PORT}`);
+  });
+}
 
-server.on('error', (err) => {
-  console.error('Server error:', err);
-});
-
-// Обработка необработанных ошибок - не завершаем процесс
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled Rejection:', err);
-});
+start();
