@@ -9,7 +9,10 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*',
+  credentials: true
+}));
 
 // ==================== AUTH ROUTES ====================
 
@@ -53,8 +56,8 @@ app.post('/api/register', async (req, res) => {
 
     const user = result.rows[0];
     res.status(201).json({ 
-      message: 'Регистрация успешна',
-      user: { id: user.id, name: user.name, email: user.email }
+      success: true, 
+      user: { id: user.id, name: user.name, email: user.email } 
     });
   } catch (err) {
     console.error('Register error:', err);
@@ -74,19 +77,19 @@ app.post('/api/login', async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
+      return res.status(401).json({ error: 'Неверные данные' });
     }
 
     const user = result.rows[0];
     const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
-      return res.status(401).json({ error: 'Неверный email или пароль' });
+      return res.status(401).json({ error: 'Неверные данные' });
     }
 
     res.json({ 
-      message: 'Вход успешен',
-      user: { id: user.id, name: user.name, email: user.email }
+      success: true, 
+      user: { id: user.id, name: user.name, email: user.email } 
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -105,7 +108,7 @@ app.get('/api/orders/:userId', async (req, res) => {
       'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
     );
-    res.json(result.rows);
+    res.json({ orders: result.rows });
   } catch (err) {
     console.error('Get orders error:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -116,8 +119,8 @@ app.get('/api/orders/:userId', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const { userId, filmTitle, filmId, format, quantity, price, total } = req.body;
 
-  if (!userId || !filmTitle || !format || !price || !total) {
-    return res.status(400).json({ error: 'Недостаточно данных для заказа' });
+  if (!userId || !filmTitle || !format || !quantity || !price || !total) {
+    return res.status(400).json({ error: 'Заполните все поля заказа' });
   }
 
   try {
@@ -125,9 +128,10 @@ app.post('/api/orders', async (req, res) => {
       `INSERT INTO orders (user_id, film_title, film_id, format, quantity, price, total) 
        VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-      [userId, filmTitle, filmId || null, format, quantity || 1, price, total]
+      [userId, filmTitle, filmId, format, quantity, price, total]
     );
-    res.status(201).json(result.rows[0]);
+
+    res.status(201).json({ success: true, order: result.rows[0] });
   } catch (err) {
     console.error('Create order error:', err);
     res.status(500).json({ error: 'Ошибка сервера' });
