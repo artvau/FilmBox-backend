@@ -9,10 +9,19 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+
+// CORS - разрешаем все источники для Railway
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Логирование всех запросов
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  next();
+});
 
 // ==================== AUTH ROUTES ====================
 
@@ -147,10 +156,28 @@ app.get('/api/health', (req, res) => {
 // ==================== START SERVER ====================
 
 async function start() {
-  await initDB();
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 FilmBox API running on port ${PORT}`);
-  });
+  try {
+    await initDB();
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 FilmBox API running on port ${PORT}`);
+    });
+    
+    server.on('error', (err) => {
+      console.error('Server error:', err);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
 }
+
+// Обработка необработанных ошибок
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+});
 
 start();
