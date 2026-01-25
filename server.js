@@ -159,23 +159,25 @@ app.get('/api/health', (req, res) => {
 
 // ==================== START SERVER ====================
 
-async function start() {
+// Сначала запускаем сервер, потом инициализируем базу
+const server = app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`🚀 FilmBox API running on port ${PORT}`);
+  
+  // Инициализируем базу данных после запуска сервера
   try {
     await initDB();
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 FilmBox API running on port ${PORT}`);
-    });
-    
-    server.on('error', (err) => {
-      console.error('Server error:', err);
-    });
   } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+    console.error('Database init failed, but server is running:', err.message);
+    // Не завершаем процесс - сервер продолжит работать
+    // Можно будет переподключиться позже
   }
-}
+});
 
-// Обработка необработанных ошибок
+server.on('error', (err) => {
+  console.error('Server error:', err);
+});
+
+// Обработка необработанных ошибок - не завершаем процесс
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
 });
@@ -183,5 +185,3 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Rejection:', err);
 });
-
-start();

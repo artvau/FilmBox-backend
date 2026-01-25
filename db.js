@@ -3,12 +3,15 @@ const { Pool } = require('pg');
 // Railway всегда использует SSL для PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  // Таймауты для Railway
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000
 });
 
 // Проверка подключения
 pool.on('error', (err) => {
-  console.error('Unexpected database error:', err);
+  console.error('Unexpected database error:', err.message);
 });
 
 // Инициализация таблиц
@@ -41,9 +44,10 @@ async function initDB() {
     `);
 
     console.log('✅ Database tables initialized');
+    return true;
   } catch (err) {
     console.error('❌ Database initialization error:', err.message);
-    throw err; // Пробрасываем ошибку чтобы сервер не запускался с битой БД
+    return false; // Не выбрасываем ошибку, просто возвращаем false
   } finally {
     if (client) client.release();
   }
