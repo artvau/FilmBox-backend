@@ -2,10 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { pool, initDB } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'filmbox-secret-key-change-in-production';
+const JWT_EXPIRES_IN = '7d'; // Токен действует 7 дней
 
 // Middleware
 app.use(express.json());
@@ -13,6 +16,35 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
   credentials: true
 }));
+
+// ==================== JWT MIDDLEWARE ====================
+
+// Middleware для проверки JWT токена
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ error: 'Требуется авторизация' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Недействительный токен' });
+    }
+    req.user = user; // Добавляем данные пользователя в request
+    next();
+  });
+}
+
+// Функция создания JWT токена
+function generateToken(user) {
+  return jwt.sign(
+    { id: user.id, name: user.name, email: user.email },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
 
 // ==================== AUTH ROUTES ====================
 
@@ -55,8 +87,11 @@ app.post('/api/register', async (req, res) => {
     );
 
     const user = result.rows[0];
+    const token = generateToken(user);
+
     res.status(201).json({ 
-      success: true, 
+      success: true,
+      token,
       user: { id: user.id, name: user.name, email: user.email } 
     });
   } catch (err) {
@@ -87,8 +122,11 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Неверные данные' });
     }
 
+    const token = generateToken(user);
+
     res.json({ 
-      success: true, 
+      success: true,
+      token,
       user: { id: user.id, name: user.name, email: user.email } 
     });
   } catch (err) {
@@ -97,16 +135,22 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ==================== ORDERS ROUTES ====================
+// Проверка токена (для восстановления сессии)
+app.get('/api/me', authenticateToken, (req, res) => {
+  res.json({ 
+    success: true, 
+    user: req.user 
+  });
+});
 
-// Получить заказы пользователя
-app.get('/api/orders/:userId', async (req, res) => {
-  const { userId } = req.params;
+// ==================== ORDERS ROUTES (Protected) ====================
 
+// Получить заказы пользователя (защищено JWT)
+app.get('/api/orders', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId]
+      [req.user.id]
     );
     res.json({ orders: result.rows });
   } catch (err) {
@@ -115,11 +159,11 @@ app.get('/api/orders/:userId', async (req, res) => {
   }
 });
 
-// Создать заказ
-app.post('/api/orders', async (req, res) => {
-  const { userId, filmTitle, filmId, format, quantity, price, total } = req.body;
+// Создать заказ (защищено JWT)
+app.post('/api/orders', authenticateToken, async (req, res) => {
+  const { filmTitle, filmId, format, quantity, price, total } = req.body;
 
-  if (!userId || !filmTitle || !format || !quantity || !price || !total) {
+  if (!filmTitle || !format || !quantity || !price || !total) {
     return res.status(400).json({ error: 'Заполните все поля заказа' });
   }
 
@@ -128,7 +172,7 @@ app.post('/api/orders', async (req, res) => {
       `INSERT INTO orders (user_id, film_title, film_id, format, quantity, price, total) 
        VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-      [userId, filmTitle, filmId, format, quantity, price, total]
+      [req.user.id, filmTitle, filmId, format, quantity, price, total]
     );
 
     res.status(201).json({ success: true, order: result.rows[0] });
