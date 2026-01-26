@@ -188,6 +188,46 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// ==================== TMDB PROXY ====================
+// Прокси для TMDB API (обход блокировки в России)
+
+const TMDB_API_KEY = process.env.TMDB_API_KEY || '23fb77a6ffa48c52a48ba4daa9f2bd2e';
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+// Получить популярные фильмы
+app.get('/api/movies/popular', async (req, res) => {
+  const page = req.query.page || 1;
+  const language = req.query.language || 'ru-RU';
+  
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=${language}&page=${page}`
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('TMDB proxy error:', err);
+    res.status(500).json({ error: 'Ошибка загрузки фильмов' });
+  }
+});
+
+// Получить детали фильма
+app.get('/api/movies/:id', async (req, res) => {
+  const { id } = req.params;
+  const language = req.query.language || 'ru-RU';
+  
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/movie/${id}?api_key=${TMDB_API_KEY}&language=${language}`
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('TMDB proxy error:', err);
+    res.status(500).json({ error: 'Ошибка загрузки фильма' });
+  }
+});
+
 // ==================== START SERVER ====================
 
 async function start() {
