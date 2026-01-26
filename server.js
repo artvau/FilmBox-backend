@@ -228,6 +228,37 @@ app.get('/api/movies/:id', async (req, res) => {
   }
 });
 
+// Прокси для изображений TMDB (обход блокировки)
+app.get('/api/image/:size/*', async (req, res) => {
+  const { size } = req.params;
+  const imagePath = '/' + req.params[0]; // Путь к изображению (например, /abc123.jpg)
+  const imageUrl = `https://image.tmdb.org/t/p/${size}${imagePath}`;
+  
+  try {
+    const response = await fetch(imageUrl);
+    
+    if (!response.ok) {
+      return res.status(response.status).send('Image not found');
+    }
+    
+    // Передаём заголовки типа контента
+    const contentType = response.headers.get('content-type');
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+    
+    // Кэшируем изображения на 7 дней
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    
+    // Передаём тело ответа
+    const buffer = await response.arrayBuffer();
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error('Image proxy error:', err);
+    res.status(500).send('Error loading image');
+  }
+});
+
 // ==================== START SERVER ====================
 
 async function start() {
